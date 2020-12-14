@@ -1,4 +1,4 @@
-PYTHON ?= python
+PYTHON ?= /usr/bin/env python
 
 install :
 	$(PYTHON) setup.py install

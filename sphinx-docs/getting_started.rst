@@ -1,13 +1,97 @@
+***************
+Getting Started
+***************
+
+========
+Overview
+========
+
+Slivka is a free software which provides easy and convenient means
+for creating web services on your local computer, server or cluster.
+It is written in Python and is available as a source code or from anaconda.
+
+The core of the system is the scheduler which manages jobs execution,
+parses command line arguments and delegates tasks to runners that
+start new processes. It uses mongo database to store and exchange data
+with the REST server which communicates with client applications --
+takes their requests and provides information about running jobs.
+
+.. figure:: overview.svg
+
+  Diagram of interactions between slivka system components.
+  The REST server pushes new requests to the database where
+  the scheduler picks them from and dispatches to the correct
+  runner. The instructions how to create web services and run
+  command line programs are taken from the config files.
+
+---------
+Scheduler
+---------
+
+Scheduler sits in the middle of the job processing and controls other
+components.
+When the scheduler is started, it creates runners (more on that later)
+for each web service specified in the configuration files.
+Then it enters its main operation mode in which it constantly monitors
+the database and running jobs. Whenever a new request appears in the
+database, the scheduler converts job parameters such as files, flags
+and other input provided by the user into command line arguments.
+They are then passed to the runner for execution and the scheduler
+starts watching the job execution and writes its current status
+back to the database.
+
+-----------
+REST server
+-----------
+
+REST server complements the scheduler providing a web interface
+which users and client applications can use to submit new jobs
+to the system.
+On startup, it creates a form for each service specified in the
+configuration file. The form contains the list of parameters
+which the user is expected to provide to start the job.
+Each parameter comes with label, description, type and
+optional constraints to inform the user what values are allowed.
+When the job request with input parameters is received from the
+client, the values are validated and, if correct, saved to
+the database for the scheduler to pick them up.
+
+-------
+Runners
+-------
+
+When talking about the scheduler, we mentioned that it passes jobs to 
+the runners for execution. Runners are internal parts of the slivka system
+(custom Runners can be created though) which provide an interface
+between the scheduler and the software available on the operating system.
+Each runner provides code that can start command line programs
+and monitor their execution state. If you are an advanced user,
+this allows you to write plugins that run your programs in new ways.
+
+------------
+Config files
+------------
+
+Configuration files live outside of the slivka module and provide
+system settings and service information. As a system
+administrator, you are responsible for creating and maintaining
+those configuration files, so the rest of this tutorial will be mostly
+dedicated to them.
+
 ============
 Installation
 ============
 
-------------
-Requirements
-------------
+Slivka is provided as a source code and an Anaconda package. Using
+conda is strongly recommended, but it can also be installed with pip
+or setuptools once the source code is obtained. Make sure that the
+programs you intend to run are accessible from where the slivka is
+installed (machine or VM). They don't have to be in the same virtual
+python/conda environment though.
 
 Installation requires Python 3.5+ (version 3.7 recommended).
-Additional requirements that will be downloaded and installed automatically, include:
+Additional requirements that will be downloaded and installed 
+automatically, include:
 
 - attrs (>=19)
 - click (>=7.0)
@@ -23,59 +107,167 @@ Additional requirements that will be downloaded and installed automatically, inc
 - uwsgi (>=2.0) (optional)
 - Werkzeug (>=0.15)
 
--------------------------
-Installing Slivka package
--------------------------
 
-It's recommended to install Slivka inside a virtual environment using
-virtualenv or conda.
+---------------------
+Installing with conda
+---------------------
 
-You can install virtualenv by running ``pip install virtualenv`` (on some Linux distributions
-you may need to install a correspinding system package e.g. ``apt-get install python-virtualenv``).
-Run ``virtualenv env``, wait for it to create a new environment in ``env``
-directory and activate using ``source env/bin/activate`` on Unix/OS X or
-``env\Scripts\activate.bat`` on Windows.
-More information about the virtualenv package can be found in `virtualenv documentation`_.
+Conda installation is recommended due to its simplicity. If you want
+to use a dedicated virtual environment create it and install slivka with:
 
-Slivka package can be installed directly from the github repository with pip.
-We recommend using development branch until the first stable version is released.
-``pip install git+git://github.com/warownia1/Slivka@dev``.
-Setuptools and all other requirements will be downloaded if not present, so internet
-connection is required during the installation.
+.. code:: 
 
-For conda users, create a new environment using ``conda create -n slivka python=3.7``
-and activate with ``conda activate slivka``.
-Slivka package can be then installed from our anaconda channel using
-``conda install -c mmwarowny -c conda-forge slivka``.
-More details can be found in `conda documentation`_.
+  conda create -n <env> python=3.7
+  conda install -n <env> -c mmwarowny -c conda-forge slivka
+  conda activate <env>
 
-.. _`virtualenv documentation`: https://virtualenv.pypa.io/en/stable/
+substituting environemnt name (e.g. slivka) for ``<env>``.
+More information can be found in `conda documentation`_.
+
 .. _`conda documentation`: https://conda.io/en/latest/
 
+-----------------------
+Installing from sources
+-----------------------
 
-After the installation, a new executable ``slivka`` will be added to your Python
-scripts directory. It will be used to create a new empty slivka configuration.
-You can also use existing configurations created by other people.
+If you are a developer wanting to tweak slivka code to own needs
+or you simply don't want to depend on conda then installation from
+sources is the way to go.
+
+Either clone the git repository ``https://github.com/bartongroup/slivka.git``
+or download and extract the zip archive here_. We suggest using
+a more up-to-date development branch until the first stable version
+is released.
+
+.. _here: https://github.com/bartongroup/slivka/archive/dev.zip
+
+Navigate to the package directory (the one containing *setup.py*) and run ::
+
+  python setup.py install
+
+You can also use a shortcut command which automatically installs slivka
+from the git repository with pip ::
+
+  pip install git+git://github.com/bartongroup/slivka.git@dev
+
+--------------
+Mongo database
+--------------
+
+Slivka makes use of `mongo database`_ to store data and exchange
+messages between its components which is crucial for its operation.
+If you do not have mongodb running on your system you can install it
+locally in your conda environment or ask your system administrator
+to install it system-wide.
+
+.. _`mongo database`: https://www.mongodb.com
+
+
+==============
+Running slivka
+==============
 
 --------------------
 Creating new project
 --------------------
 
-In order to create a new Slivka project directory execute ::
+A slivka project is a single instance of slivka with its own settings
+and collection of services. You can create as many instances as you want
+each running in a separate directory.
+
+During installation, a ``slivka`` executable was created and added to
+your path. It can be used to initialize new projects and run slivka.
+
+Let us start with initializing an empty project. To do this, run ::
 
    slivka init <name>
 
 replacing ``<name>`` with the name of the directory where the configuration 
-files will be copied to.
+files will be stored in.
 Use ``.`` if you wish to set-up the project in the current directory.
-If the slivka executable cannot be accessed (e.g. it is not added to the 
-PATH), you can alternatively run slivka as a python module with ::
 
-   python -m slivka init <name>
+.. note::
 
-The newly created directory will contain default settings files and 
+  If the slivka executable cannot be accessed directly it can also be
+  run as a python module ::
+
+     python -m slivka [args...]
+
+The newly created directory will contain default setting files and 
 an example service. In the following sections we will walk through the 
 process of creating and configuring new services.
+
+-----------
+Starting up
+-----------
+
+At this point you are ready to launch a newly created slivka project.
+Navigate to the project directory and start three processes ::
+
+  slivka start server &
+  slivka start scheduler &
+  slivka start local-queue &
+
+It launches a HTTP server, a scheduler and a simple worker queue locally
+(``&`` runs them in background, use ``fg`` command to bring them back).
+
+.. note::
+
+  If your mongo database uses listening port other than default
+  or any of the ports used by slivka is already in use you can
+  change it in the *settings.yaml* file.
+
+--------------
+Submitting job
+--------------
+
+Now, you can send a GET request or navigate with your web browser to
+`<http://127.0.0.1:8000/api/services>`_ to see the list of currently
+available services, or one "Example Service" to be specific.
+
+Moving on to */api/services/example* will show you the details of 
+the service along with the list of form fields a.k.a. input parameters
+of that service. Don't worry if the details doesn't make much sense
+yet. For now, notice one field named *msg* which we are going to use.
+
+.. code:: json
+
+  {
+    "type": "text",
+    "name": "msg",
+    "label": "Message",
+    "description": "Message printed to the output file",
+    "required": true,
+    "multiple": false,
+    "default": null,
+    "minLength": 3,
+    "maxLength": 15
+  }
+
+This tells us that one of the parameters the example service accepts
+is named "msg", it is a required parameter and its length should be
+between 3 and 15 characters. In order to submit a new job, send a POST
+request to that endpoint providing a value for the *msg* parameter. 
+Using curl:
+
+.. code:: sh
+
+  curl -d"msg=hello world" http://localhost:8000/api/services/example
+
+Congratulations, you've just submitted the first job to your slivka
+instance. You should have received the id of the newly created job and
+slivka should have started working on it.
+
+====================
+Configuring services
+====================
+
+Until now, we've only seen and submitted a job to the existing example
+service. In this section we will take a closer look into the configuration
+file of the example service and learn how to create our own services.
+
+Navigate to the *services* folder in your slivka project directory.
+It contains a single *example.service.yaml* file. 
 
 =================
 Project Structure
